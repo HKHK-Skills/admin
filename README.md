@@ -1,38 +1,73 @@
 # HKHK-Skills Admin
 
+Õpilaste ja õpetajate automaatne kutsumine GitHub organisatsiooni.
+
 ## Seadistamine
 
-### 1. Secret: STUDENTS_JSON
+### 1. GitHub App loomine
 
-**Settings → Secrets → Actions → New secret**
+1. Mine: https://github.com/settings/apps/new
+2. Täida:
+   - **Name:** `HKHK-Skills-Sync`
+   - **Homepage URL:** `https://github.com/HKHK-Skills`
+   - **Webhook:** ❌ Active OFF
+3. **Organization permissions:**
+   - Members → Read and write
+   - Projects → Read and write
+   - Webhooks → Read and write
+4. **Where can this be installed:** Only on this account
+5. Klikka **Create GitHub App**
 
-Name: `STUDENTS_JSON`
+### 2. App seadistamine
 
-Value (kopeeri ja muuda):
+1. **Generate private key** → .pem fail laetakse alla
+2. Mine **Advanced** → **Make public**
+3. Mine **Install App** → vali **HKHK-Skills** org
+
+### 3. Secrets (HKHK-Skills org tasemel)
+
+**HKHK-Skills → Settings → Secrets and variables → Actions → New organization secret**
+
+| Secret | Väärtus | Repository access |
+|--------|---------|-------------------|
+| `STUDENTS_JSON` | Õpilaste JSON (vaata allpool) | Selected → admin |
+| `APP_PRIVATE_KEY` | .pem faili sisu* | Selected → admin |
+
+*Kopeeri .pem: `cat ~/Downloads/*.pem | pbcopy`
+
+### 4. Variables (HKHK-Skills org tasemel)
+
+**HKHK-Skills → Settings → Secrets and variables → Actions → Variables → New organization variable**
+
+| Variable | Väärtus |
+|----------|---------|
+| `APP_ID` | App ID numbrist (nt `2533231`) |
+
+### 5. STUDENTS_JSON formaat
+
 ```json
 {
   "students": [
-    {"email": "opilane1@hkhk.edu.ee", "group": "IT-25"},
-    {"email": "opilane2@hkhk.edu.ee", "group": "IT-25"}
+    {"name": "Eesnimi Perenimi", "email": "email@hkhk.edu.ee", "group": "IT-25"}
   ],
   "teachers": [
-    {"email": "opetaja1@hkhk.edu.ee"},
-    {"email": "opetaja2@hkhk.edu.ee"}
+    {"name": "Eesnimi Perenimi", "email": "email@hkhk.edu.ee"}
   ]
 }
 ```
 
-### 2. GitHub App
-
-1. https://github.com/settings/apps/new
-2. Permissions: **Organization → Members** (Read & Write)
-3. Install to **HKHK-Skills**
-4. Secret: `APP_PRIVATE_KEY` → .pem sisu
-5. Variable: `APP_ID` → App ID
-
 ## Kasutamine
 
-**Actions → Sync Students → Run workflow**
+**HKHK-Skills/admin → Actions → Sync Students → Run workflow**
 
-- `dry_run: true` → näitab mida teeks
-- `dry_run: false` → saadab kutsed
+| Valik | Tulemus |
+|-------|---------|
+| `dry_run: true` | Näitab mida teeks (ohutu test) |
+| `dry_run: false` | Saadab päriselt kutsed |
+
+## Mida workflow teeb
+
+1. Loeb `STUDENTS_JSON` secret'ist andmed
+2. Loob teamid: `students-it-25`, `teachers`
+3. Saadab org kutsed emailide järgi
+4. Lisab liikmed õigetesse teamidesse

@@ -1,7 +1,7 @@
 # Sync Students from Secret
 #
 # SEADISTAMINE:
-# 1. Secret: STUDENTS_JSON
+# 1. Secret: STUDENTS_JSON (või STUDENTS_JSON_TEST)
 # 2. Secret: APP_PRIVATE_KEY  
 # 3. Variable: APP_ID
 
@@ -13,6 +13,11 @@ on:
       dry_run:
         description: 'Dry run'
         default: 'true'
+        type: choice
+        options: ['true', 'false']
+      use_test_data:
+        description: 'Use test data (STUDENTS_JSON_TEST)'
+        default: 'false'
         type: choice
         options: ['true', 'false']
 
@@ -27,10 +32,17 @@ jobs:
       - name: Load data
         env:
           STUDENTS_JSON: ${{ secrets.STUDENTS_JSON }}
+          STUDENTS_JSON_TEST: ${{ secrets.STUDENTS_JSON_TEST }}
         run: |
-          echo "$STUDENTS_JSON" > data.json
+          if [ "${{ inputs.use_test_data }}" == "true" ]; then
+            echo "📋 Using TEST data"
+            echo "$STUDENTS_JSON_TEST" > data.json
+          else
+            echo "📋 Using PRODUCTION data"
+            echo "$STUDENTS_JSON" > data.json
+          fi
           echo "✅ $(jq '.students | length' data.json) students, $(jq '.teachers | length' data.json) teachers"
-          jq -r '.students[].group' data.json | sort -u > groups.txt
+          jq -r '.students[].group' data.json 2>/dev/null | sort -u > groups.txt || touch groups.txt
 
       - name: Dry run
         if: inputs.dry_run == 'true'
@@ -39,7 +51,12 @@ jobs:
           echo "Teams:"
           while read -r G; do [ -z "$G" ] && continue; echo "  - ${TEAM_PREFIX}-$(echo $G | tr '[:upper:]' '[:lower:]')"; done < groups.txt
           echo "  - teachers"
+          echo ""
           echo "Invites: $(jq '.students | length' data.json) students + $(jq '.teachers | length' data.json) teachers"
+          echo ""
+          echo "📧 Emails:"
+          jq -r '.students[].email' data.json 2>/dev/null || true
+          jq -r '.teachers[].email' data.json 2>/dev/null || true
 
       - name: Get token
         id: token
@@ -59,22 +76,26 @@ jobs:
           while read -r G; do
             [ -z "$G" ] && continue
             T="${TEAM_PREFIX}-$(echo $G | tr '[:upper:]' '[:lower:]')"
-            gh api "orgs/${ORG_NAME}/teams" -f name="$T" -f privacy="closed" 2>/dev/null || true
+            gh api "orgs/${ORG_NAME}/teams" -f name="$T" -f privacy="closed" 2>/dev/null && echo "✅ Team: $T" || echo "ℹ️ Team exists: $T"
           done < groups.txt
-          gh api "orgs/${ORG_NAME}/teams" -f name="teachers" -f privacy="closed" 2>/dev/null || true
+          gh api "orgs/${ORG_NAME}/teams" -f name="teachers" -f privacy="closed" 2>/dev/null && echo "✅ Team: teachers" || echo "ℹ️ Team exists: teachers"
           
           # Students
-          jq -c '.students[]' data.json | while read -r S; do
+          jq -c '.students[]' data.json 2>/dev/null | while read -r S; do
             EMAIL=$(echo "$S" | jq -r '.email')
             T="${TEAM_PREFIX}-$(echo $(echo "$S" | jq -r '.group') | tr '[:upper:]' '[:lower:]')"
             TID=$(gh api "orgs/${ORG_NAME}/teams/${T}" --jq '.id' 2>/dev/null || echo "")
-            [ -n "$TID" ] && gh api "orgs/${ORG_NAME}/invitations" -f email="$EMAIL" -f role="direct_member" -f team_ids[]="$TID" 2>/dev/null || true
+            if [ -n "$TID" ]; then
+              gh api "orgs/${ORG_NAME}/invitations" -f email="$EMAIL" -f role="direct_member" -f team_ids[]="$TID" 2>/dev/null && echo "✅ Invited: $EMAIL" || echo "⏭️ Already invited: $EMAIL"
+            fi
             sleep 0.3
           done
           
           # Teachers
           TID=$(gh api "orgs/${ORG_NAME}/teams/teachers" --jq '.id' 2>/dev/null || echo "")
-          jq -r '.teachers[].email' data.json | while read -r E; do
-            [ -n "$TID" ] && gh api "orgs/${ORG_NAME}/invitations" -f email="$E" -f role="direct_member" -f team_ids[]="$TID" 2>/dev/null || true
+          jq -r '.teachers[].email' data.json 2>/dev/null | while read -r E; do
+            if [ -n "$TID" ] && [ -n "$E" ]; then
+              gh api "orgs/${ORG_NAME}/invitations" -f email="$E" -f role="direct_member" -f team_ids[]="$TID" 2>/dev/null && echo "✅ Invited: $E" || echo "⏭️ Already invited: $E"
+            fi
             sleep 0.3
           done

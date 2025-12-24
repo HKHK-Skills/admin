@@ -1,0 +1,80 @@
+# Sync Students from Secret
+#
+# SEADISTAMINE:
+# 1. Secret: STUDENTS_JSON
+# 2. Secret: APP_PRIVATE_KEY  
+# 3. Variable: APP_ID
+
+name: Sync Students
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run'
+        default: 'true'
+        type: choice
+        options: ['true', 'false']
+
+env:
+  ORG_NAME: HKHK-Skills
+  TEAM_PREFIX: students
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Load data
+        env:
+          STUDENTS_JSON: ${{ secrets.STUDENTS_JSON }}
+        run: |
+          echo "$STUDENTS_JSON" > data.json
+          echo "✅ $(jq '.students | length' data.json) students, $(jq '.teachers | length' data.json) teachers"
+          jq -r '.students[].group' data.json | sort -u > groups.txt
+
+      - name: Dry run
+        if: inputs.dry_run == 'true'
+        run: |
+          echo "🔍 DRY RUN"
+          echo "Teams:"
+          while read -r G; do [ -z "$G" ] && continue; echo "  - ${TEAM_PREFIX}-$(echo $G | tr '[:upper:]' '[:lower:]')"; done < groups.txt
+          echo "  - teachers"
+          echo "Invites: $(jq '.students | length' data.json) students + $(jq '.teachers | length' data.json) teachers"
+
+      - name: Get token
+        id: token
+        if: inputs.dry_run != 'true'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ env.ORG_NAME }}
+
+      - name: Create teams & invite
+        if: inputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          # Teams
+          while read -r G; do
+            [ -z "$G" ] && continue
+            T="${TEAM_PREFIX}-$(echo $G | tr '[:upper:]' '[:lower:]')"
+            gh api "orgs/${ORG_NAME}/teams" -f name="$T" -f privacy="closed" 2>/dev/null || true
+          done < groups.txt
+          gh api "orgs/${ORG_NAME}/teams" -f name="teachers" -f privacy="closed" 2>/dev/null || true
+          
+          # Students
+          jq -c '.students[]' data.json | while read -r S; do
+            EMAIL=$(echo "$S" | jq -r '.email')
+            T="${TEAM_PREFIX}-$(echo $(echo "$S" | jq -r '.group') | tr '[:upper:]' '[:lower:]')"
+            TID=$(gh api "orgs/${ORG_NAME}/teams/${T}" --jq '.id' 2>/dev/null || echo "")
+            [ -n "$TID" ] && gh api "orgs/${ORG_NAME}/invitations" -f email="$EMAIL" -f role="direct_member" -f team_ids[]="$TID" 2>/dev/null || true
+            sleep 0.3
+          done
+          
+          # Teachers
+          TID=$(gh api "orgs/${ORG_NAME}/teams/teachers" --jq '.id' 2>/dev/null || echo "")
+          jq -r '.teachers[].email' data.json | while read -r E; do
+            [ -n "$TID" ] && gh api "orgs/${ORG_NAME}/invitations" -f email="$E" -f role="direct_member" -f team_ids[]="$TID" 2>/dev/null || true
+            sleep 0.3
+          done

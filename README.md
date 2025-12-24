@@ -39,9 +39,9 @@
 
 **HKHK-Skills → Settings → Secrets and variables → Actions → Variables → New organization variable**
 
-| Variable | Väärtus |
-|----------|---------|
-| `APP_ID` | App ID numbrist (nt `2533231`) |
+| Variable | Väärtus | Repository access |
+|----------|---------|-------------------|
+| `APP_ID` | App ID numbrist (nt `2533231`) | Selected → admin |
 
 ### 5. STUDENTS_JSON formaat
 

@@ -86,7 +86,7 @@ jobs:
             T="${TEAM_PREFIX}-$(echo $(echo "$S" | jq -r '.group') | tr '[:upper:]' '[:lower:]')"
             TID=$(gh api "orgs/${ORG_NAME}/teams/${T}" --jq '.id' 2>/dev/null || echo "")
             if [ -n "$TID" ]; then
-              gh api "orgs/${ORG_NAME}/invitations" -f email="$EMAIL" -f role="direct_member" -f team_ids[]="$TID" 2>/dev/null && echo "✅ Invited: $EMAIL" || echo "⏭️ Already invited: $EMAIL"
+              gh api "orgs/${ORG_NAME}/invitations" -f email="$EMAIL" -f role="direct_member" --field team_ids[]="$TID" 2>/dev/null && echo "✅ Invited: $EMAIL" || echo "⏭️ Already invited: $EMAIL"
             fi
             sleep 0.3
           done
@@ -95,7 +95,7 @@ jobs:
           TID=$(gh api "orgs/${ORG_NAME}/teams/teachers" --jq '.id' 2>/dev/null || echo "")
           jq -r '.teachers[].email' data.json 2>/dev/null | while read -r E; do
             if [ -n "$TID" ] && [ -n "$E" ]; then
-              gh api "orgs/${ORG_NAME}/invitations" -f email="$E" -f role="direct_member" -f team_ids[]="$TID" 2>/dev/null && echo "✅ Invited: $E" || echo "⏭️ Already invited: $E"
+              gh api "orgs/${ORG_NAME}/invitations" -f email="$E" -f role="direct_member" --field team_ids[]="$TID" 2>/dev/null && echo "✅ Invited: $E" || echo "⏭️ Already invited: $E"
             fi
             sleep 0.3
           done

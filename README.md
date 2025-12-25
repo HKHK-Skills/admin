@@ -16,86 +16,127 @@ Automaatne süsteem õpilaste GitHub organisatsioonide haldamiseks.
 ┌─────────────────────────────────────────────────────────────┐
 │                   GITHUB ACTIONS                             │
 ├─────────────────────────────────────────────────────────────┤
-│  create-student-org.yml  →  setup-student-org.yml           │
-│  sync-students.yml       →  update-semester.yml             │
+│  setup-student-org.yml   →  Seadistab õpilase org'i        │
+│  sync-students.yml       →  Sünkib teams HKHK-Skills        │
 └─────────────────────────────────────────────────────────────┘
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                   GITHUB STRUCTURE                           │
 ├─────────────────────────────────────────────────────────────┤
-│  ${MATERIALS_ORG}/           (materjalid)                   │
-│  ${ORG_PREFIX}-{username}/   (õpilase org)                  │
+│  HKHK-Skills/            (materjalid, PUBLIC)               │
+│  {initial}{perenimi}/    (õpilase org, nt akreimann)        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Variables (org-level)
+## Org Nime Genereerimine
 
-Kõik dünaamiline - muuda variables, mitte koodi!
+Õpilase org nimi genereeritakse **emailist** automaatselt:
 
-| Variable | Väärtus | Kirjeldus |
-|----------|---------|-----------|
-| `APP_ID` | `123456` | GitHub App ID |
-| `MATERIALS_ORG` | `HKHK-Skills` | Materjalide org |
-| `DEFAULT_BRANCH` | `main` | Default branch nimi |
-| `STUDENT_ROLE` | `member` | Õpilase roll oma org'is |
-| `TEACHER_ROLE` | `admin` | Õpetaja roll õpilase org'is |
+| Email | Org nimi |
+|-------|----------|
+| `eesnimi.perenimi@hkhk.edu.ee` | `eperenimi` |
+| `jaan.tamm@hkhk.edu.ee` | `jtamm` |
+| `märt.põõsas@hkhk.edu.ee` | `mpoosas` |
+
+**Loogika:**
+1. Võta email prefix: `alex.kreimann`
+2. Eralda eesnimi + perenimi: `alex`, `kreimann`
+3. Võta eesnime initsiaal: `a`
+4. Ühenda: `a` + `kreimann` = `akreimann`
+5. Normaliseeri (täpitähed, lowercase): `ä→a`, `ö→o`, `ü→u`, `õ→o`
+
+**GitHub org nime reeglid:**
+- Tähed (a-z), numbrid (0-9), sidekriips (-)
+- Ei tohi: tühikud, punktid, alakriipsud, täpitähed
+- Max 39 tähemärki
 
 ---
 
 ## Secrets (org-level)
 
-| Secret | Kirjeldus |
-|--------|-----------|
-| `APP_PRIVATE_KEY` | GitHub App private key |
-| `STUDENTS_JSON` | Õpilaste andmed (JSON array) |
-| `TEACHERS_JSON` | Õpetajate andmed (JSON array) |
-| `GROUPS_JSON` | Gruppide andmed (JSON object) |
+| Secret | Kirjeldus | Kus kasutada |
+|--------|-----------|---------------|
+| `GH_PAT` | Personal Access Token (classic) | Kõik workflow'd |
+| `STUDENTS_JSON` | Õpilaste andmed (JSON array) | setup/sync |
+| `TEACHERS_JSON` | Õpetajate andmed (JSON array) | setup/sync |
+| `GROUPS_JSON` | Gruppide andmed (JSON object) | setup/sync |
+
+### GH_PAT - Personal Access Token
+
+**Miks PAT, mitte GitHub App?**
+- GitHub App tuleb installida IGASSE org'i eraldi
+- PAT töötab kõigis org'ides kus sina oled owner
+- Automaatne App installimine vajab Enterprise plaani
+
+**Loomine:** https://github.com/settings/tokens → **Classic token** (mitte fine-grained!)
+
+**Vajalikud scope'id:**
+
+| Scope | Miks vajalik |
+|-------|---------------|
+| `repo` | Repode loomine, kirjutamine õpilaste org'ides |
+| `admin:org` | Org'ide haldus, kutsete saatmine, teams |
+| `read:user` | Kasutajate ID pärimine kutsete jaoks |
+| `project` | Valikuline - Projects haldamine |
+| `write:discussion` | Valikuline - Discussions haldamine |
+
+**Expiration:** 90+ päeva (või "No expiration")
+
+**Repository access:** Selected repositories → `admin`
+
+**TÄHTIS:** 
+- Token on seotud SINU kontoga
+- Kui sina lahkud: loo uus token teise owner'i kontolt
+- Uuenda `GH_PAT` secret
+
+### Vana: APP_PRIVATE_KEY (deprecated)
+
+GitHub App enam ei kasutata, sest:
+- App tuleb installida igasse org'i eraldi
+- Automaatne installimine vajab Enterprise plaani
+- PAT on lihtsam ja töötab kohe
 
 ---
 
-## JSON Struktuurid
+## JSON Struktuurid (Secrets)
 
 ### STUDENTS_JSON
 
 ```json
 [
   {
-    "github": "student-username",
-    "group": "IT-25",
-    "email": "student@school.edu.ee"
-  },
-  {
-    "github": "another-student",
-    "group": "IT-25",
-    "email": "another@school.edu.ee"
+    "name": "Eesnimi Perenimi",
+    "email": "eesnimi.perenimi@hkhk.edu.ee",
+    "group": "IT-25"
   }
 ]
 ```
+
+**NB!** `github` username pole vajalik - kutse läheb emailile ja õpilane loob/seob oma konto.
 
 ### TEACHERS_JSON
 
 ```json
 [
   {
-    "github": "teacher-owner",
-    "subjects": ["NET"],
+    "github": "teacher-github-username",
+    "subjects": ["DOK", "LIN"],
     "role": "owner"
   },
   {
-    "github": "teacher-admin-1",
-    "subjects": ["DOK", "DIG", "SKR", "PRO"],
-    "role": "admin"
-  },
-  {
-    "github": "teacher-admin-2",
-    "subjects": ["SEC", "ITI", "LIN", "MIC"],
+    "github": "another-teacher",
+    "subjects": ["NET", "PRO"],
     "role": "admin"
   }
 ]
 ```
+
+**Rollid:**
+- `owner` - Kõik õigused, saab org'i kustutada, ownership transfer
+- `admin` - Kutsed, repod, teams, aga ei saa org'i kustutada
 
 ### GROUPS_JSON
 
@@ -113,19 +154,16 @@ Kõik dünaamiline - muuda variables, mitte koodi!
     "curriculum": "259012",
     "start_year": 2024,
     "end_year": 2028,
-    "current_subjects": ["LIN", "WIN", "NET", "PRO"]
-  },
-  "ITS-25": {
-    "name": "IT süsteemid 2025",
-    "curriculum": "259013",
-    "start_year": 2025,
-    "end_year": 2029,
-    "current_subjects": ["DOK", "LIN", "NET"]
+    "current_subjects": ["DOK", "LIN", "NET", "PRO"]
   }
 }
 ```
 
-### config/subjects.json (PUBLIC)
+---
+
+## config/subjects.json (PUBLIC)
+
+See fail on PUBLIC - ei sisalda isikuandmeid, ainult ainete info.
 
 ```json
 {
@@ -139,107 +177,130 @@ Kõik dünaamiline - muuda variables, mitte koodi!
 }
 ```
 
+**Täielik ainete nimekiri:**
+
+| Kood | Aine | Moodul |
+|------|------|--------|
+| DOK | Dokumentatsiooni loomine | Oskused eluks ja tööks |
+| DIG | Digisisu loomine | Digioskuste arendamine |
+| SEC | Digiturvalisus ja probleemilahendus | Digioskuste arendamine |
+| OPS | Op.süsteemide ja küberturbe alused | IT valdkonna alusteadmised |
+| ITI | Sissejuhatus IT valdkonda ja IT töökoht | IT valdkonna alusteadmised |
+| NET | Arvutivõrkude alused | IT valdkonna alusteadmised |
+| WIN | Windows operatsioonisüsteemid | Põhiõpingud |
+| LIN | Linux operatsioonisüsteemide haldus | Põhiõpingud |
+| SKR | Skriptimisvahendid | Valiõpingud |
+| MIC | Mikrokontrollerid ja robootika | Valiõpingud |
+| PRO | Programmeerimise alused | Põhiõpingud |
+
 ---
 
-## Organisatsioonid
+## GDPR / Privaatsus
 
-| Muster | Näide | Tüüp | Visibility |
-|--------|-------|------|------------|
-| `${MATERIALS_ORG}` | `HKHK-Skills` | Materjalid | Public |
-| `{eesnimi initial}{perenimi}` | `akreimann` | Õpilane | Private |
-| `{grupp}-{projekt}` | `IT25-veebipood` | Projekt | Private |
+| Andmed | Asukoht | Nähtavus |
+|--------|---------|----------|
+| Õpilaste nimed, emailid | `STUDENTS_JSON` secret | Peidetud |
+| Õpetajate GitHub usernames | `TEACHERS_JSON` secret | Peidetud |
+| Gruppide info | `GROUPS_JSON` secret | Peidetud |
+| Ainete koodid, nimed | `config/subjects.json` | Public |
 
----
-
-## Teams (${MATERIALS_ORG} sees)
-
-| Muster | Näide | Liikmed |
-|--------|-------|---------|
-| `teachers` | `teachers` | Kõik õpetajad |
-| `teachers-{AINE}` | `teachers-DOK` | DOK aine õpetajad |
-| `students-{GRUPP}` | `students-IT-25` | IT-25 õpilased |
-
-Teams luuakse automaatselt TEACHERS_JSON ja GROUPS_JSON põhjal.
+**Miks secrets?**
+- Repo on public (et teised koolid saaksid kasutada)
+- Isikuandmed peavad olema peidetud (GDPR)
+- Secrets on encrypted ja nähtavad ainult workflow'dele
 
 ---
 
 ## Rollid ja Permissions
 
-### ${MATERIALS_ORG} (materjalid)
+### Õpilase org'is (nt `akreimann`)
 
-| Roll | Kes | Permission | Allikas |
-|------|-----|------------|---------|
-| Owner | `role: owner` teachers | Admin | TEACHERS_JSON |
-| Admin | `role: admin` teachers | Write | TEACHERS_JSON |
-| Read | Õpilased | Read | STUDENTS_JSON → team |
+| Roll | Kes | Kuidas määratakse |
+|------|-----|-------------------|
+| **Owner** | `role: owner` õpetajad | TEACHERS_JSON |
+| **Admin** | Õpetajad kelle ained kattuvad grupi ainetega | TEACHERS_JSON + GROUPS_JSON |
+| **Member** | Õpilane ise | Email kutse |
 
-### ${ORG_PREFIX}-{username} (õpilase org)
+**Näide:**
+- Õpilane grupis IT-24
+- IT-24 current_subjects: `["DOK", "LIN", "NET", "PRO"]`
+- Õpetaja X õpetab: `["DOK", "DIG", "SKR", "PRO"]`
+- Ühisosa: `["DOK", "PRO"]` → Õpetaja X saab admin õigused
 
-| Roll | Kes | Permission | Loogika |
-|------|-----|------------|---------|
-| Owner | `role: owner` teachers | Owner | TEACHERS_JSON |
-| Admin | Õpetajad kelle ained ∩ grupi subjects | Admin | TEACHERS_JSON ∩ GROUPS_JSON |
-| Member | Õpilane | Write | STUDENTS_JSON |
+### HKHK-Skills org'is (materjalid)
 
----
-
-## Permission Matrix
-
-### Org-level
-
-| Permission | Owner | Admin | Member |
-|------------|:-----:|:-----:|:------:|
-| Org settings | ✅ | ❌ | ❌ |
-| Manage members | ✅ | ✅ | ❌ |
-| Manage teams | ✅ | ✅ | ❌ |
-| Create repos | ✅ | ✅ | ⚙️ |
-| Delete org | ✅ | ❌ | ❌ |
-
-### Repo-level
-
-| Permission | Admin | Write | Read |
-|------------|:-----:|:-----:|:----:|
-| Settings | ✅ | ❌ | ❌ |
-| Push | ✅ | ✅ | ❌ |
-| Pull request | ✅ | ✅ | ✅ |
-| Clone | ✅ | ✅ | ✅ |
+| Roll | Kes |
+|------|-----|
+| **Owner** | Peamine admin |
+| **Admin** | Teised õpetajad |
+| **Read** | Õpilased (teams kaudu) |
 
 ---
 
 ## Workflows
 
-| Workflow | Trigger | Mida teeb |
-|----------|---------|-----------|
-| `create-student-org.yml` | Manual | Loob õpilase org'i |
-| `setup-student-org.yml` | Called | Seadistab org'i (invites, repos) |
-| `sync-students.yml` | Manual/Schedule | Sünkib teams ${MATERIALS_ORG} |
-| `update-semester.yml` | Manual | Uuendab permissions |
-| `transfer-ownership.yml` | Manual | Annab org'i õpilasele |
+### setup-student-org.yml
+
+**Trigger:** Manual (workflow_dispatch)
+
+**Input:** `student_email` (nt `alex.kreimann@hkhk.edu.ee`)
+
+**Mida teeb:**
+1. Leiab õpilase STUDENTS_JSON'ist emaili järgi
+2. Genereerib org nime: `alex.kreimann` → `akreimann`
+3. Kontrollib kas org eksisteerib (kui ei → juhised käsitsi loomiseks)
+4. Kutsub owner õpetajad
+5. Kutsub admin õpetajad (kelle ained kattuvad grupi ainetega)
+6. Kutsub õpilase (emailile)
+7. Loob repod: `{aine}-labs` + `portfolio`
+
+### sync-students.yml
+
+**Trigger:** Manual või Schedule
+
+**Mida teeb:**
+- Sünkroniseerib teams HKHK-Skills org'is
+- Loob `students-{grupp}` teams
+- Lisab õpilased õigetesse team'idesse
 
 ---
 
-## Flow: Uus õpilane
+## Flow: Uue õpilase lisamine
 
 ```
 1. Lisa STUDENTS_JSON:
-   {"github": "uus-opilane", "group": "IT-25", "email": "..."}
+   {"name": "Uus Õpilane", "email": "uus.opilane@hkhk.edu.ee", "group": "IT-25"}
 
-2. Käivita: create-student-org.yml
-   Input: student_github = "student-username"
-   
-3. Workflow loeb:
-   - STUDENTS_JSON → leiab grupi (IT-25)
-   - GROUPS_JSON → leiab current_subjects
-   - TEACHERS_JSON → leiab õpetajad nende ainete jaoks
-   - config/subjects.json → leiab repo nimed
+2. Loo org KÄSITSI: github.com/organizations/new
+   - Nimi: uopilane (genereeritud emailist)
+   - Plan: Free
 
-4. Workflow loob:
-   - Org: ${ORG_PREFIX}-uus-opilane
-   - Invites: owner + admins + student
-   - Repos: {subject.material_repo}-labs + portfolio
+3. Käivita workflow: setup-student-org.yml
+   - Input: uus.opilane@hkhk.edu.ee
 
-5. Käivita: sync-students.yml
-   - Lisab õpilase ${MATERIALS_ORG}/teams/students-IT-25
+4. Workflow:
+   - Kutsub õpetajad org'i
+   - Kutsub õpilase (email)
+   - Loob repod
+```
+
+**Miks org käsitsi?**
+- GitHub API ei luba org'e luua Free plaanil
+- Campus Program võib seda muuta
+- Kuni selle ajani: 30 sek käsitsi tööd per õpilane
+
+---
+
+## Flow: Lõpetamine (Ownership Transfer)
+
+```
+1. Käivita: transfer-ownership.yml (TODO)
+   Input: student_email
+
+2. Workflow:
+   - Eemaldab kõik õpetajad org'ist
+   - Teeb õpilase Owner'iks
+   - Õpilane saab oma portfoolio!
 ```
 
 ---
@@ -250,26 +311,11 @@ Teams luuakse automaatselt TEACHERS_JSON ja GROUPS_JSON põhjal.
 1. Uuenda GROUPS_JSON:
    "IT-25": { "current_subjects": ["uued", "ained"] }
 
-2. Käivita: update-semester.yml
+2. Käivita: update-semester.yml (TODO)
 
 3. Workflow:
-   - Loeb GROUPS_JSON
-   - Uuendab permissions kõigis ${ORG_PREFIX}-* org'ides
+   - Uuendab permissions kõigis õpilaste org'ides
    - Lisab/eemaldab õpetajaid vastavalt uutele ainetele
-```
-
----
-
-## Flow: Lõpetamine
-
-```
-1. Käivita: transfer-ownership.yml
-   Input: student_github = "student-username"
-
-2. Workflow:
-   - Eemaldab kõik õpetajad org'ist
-   - Teeb õpilase Owner'iks
-   - Õpilane saab portfoolio!
 ```
 
 ---
@@ -279,100 +325,69 @@ Teams luuakse automaatselt TEACHERS_JSON ja GROUPS_JSON põhjal.
 ```
 admin/
 ├── config/
-│   └── subjects.json            # Ainete definitsioonid (public)
-│
-├── scripts/
-│   └── create_student_org.sh    # Backup skript
+│   └── subjects.json            # Ainete definitsioonid (PUBLIC)
 │
 ├── .github/
 │   └── workflows/
-│       ├── create-student-org.yml
-│       ├── setup-student-org.yml
-│       ├── sync-students.yml
-│       ├── update-semester.yml
-│       └── transfer-ownership.yml
+│       ├── setup-student-org.yml    # Seadistab õpilase org'i
+│       ├── sync-students.yml        # Sünkib teams
+│       ├── update-semester.yml      # TODO
+│       └── transfer-ownership.yml   # TODO
 │
 └── README.md
 ```
 
 ---
 
-## Lisa uus aine
+## Troubleshooting
 
-1. Lisa `config/subjects.json`:
-```json
-{
-  "UUS": {
-    "code": "UUS",
-    "name": "Uus aine",
-    "name_en": "New Subject",
-    "module": "Mingi moodul",
-    "material_repo": "uus-aine"
-  }
-}
-```
+### "Resource not accessible by integration" (403)
 
-2. Lisa õpetaja `TEACHERS_JSON`:
-```json
-{"github": "opetaja", "subjects": ["UUS"], "role": "admin"}
-```
+**Põhjus:** Token/App ei saa ligi org'ile
 
-3. Lisa grupile `GROUPS_JSON`:
-```json
-"IT-25": { "current_subjects": [..., "UUS"] }
-```
+**Lahendus PAT puhul:**
+1. Kontrolli et PAT scope'id on õiged (repo, admin:org, read:user)
+2. Kontrolli et sina oled org'i owner
+3. Kontrolli et PAT pole aegunud
 
----
+### Org ei eksisteeri
 
-## Lisa uus grupp
+**Põhjus:** Org tuleb luua käsitsi enne workflow käivitamist
 
-1. Lisa `GROUPS_JSON`:
-```json
-{
-  "IT-26": {
-    "name": "Info- ja kommunikatsioonitehnoloogia 2026",
-    "curriculum": "259012",
-    "start_year": 2026,
-    "end_year": 2030,
-    "current_subjects": ["DOK", "DIG", "NET"]
-  }
-}
-```
+**Lahendus:**
+1. Mine: https://github.com/organizations/new
+2. Nimi: (workflow ütleb mis nimi)
+3. Plan: Free
+4. Käivita workflow uuesti
 
-2. Lisa õpilased `STUDENTS_JSON`:
-```json
-{"github": "uus-opilane", "group": "IT-26", "email": "..."}
-```
+### Kutse ei lähe
+
+**Põhjus:** Vale email või kasutaja juba org'is
+
+**Lahendus:**
+1. Kontrolli emaili STUDENTS_JSON'is
+2. Kontrolli kas kasutaja pole juba org'is
 
 ---
 
-## Lisa uus õpetaja
+## Tulevikus
 
-1. Lisa `TEACHERS_JSON`:
-```json
-{
-  "github": "uus-opetaja",
-  "subjects": ["DOK", "LIN"],
-  "role": "admin"
-}
-```
+### Campus Program
 
-2. Käivita `sync-students.yml` - lisab õpetaja team'idesse
+Kui Campus Program kinnitatakse:
+- Võib-olla saab org'e API kaudu luua
+- Rohkem Actions minuteid
+- Codespaces tunnid
 
----
-
-## Tulevikus: Keycloak
+### Keycloak integratsioon
 
 ```
 TAHVEL → KEYCLOAK → GITHUB
 
 Keycloak asendab JSON secrets:
-- STUDENTS_JSON → Keycloak Users (group: students/*)
-- TEACHERS_JSON → Keycloak Users (group: teachers/*)
-- GROUPS_JSON → Keycloak Groups (students/*)
-
-Workflow muutub:
-  secrets.STUDENTS_JSON → keycloak.api.get_users()
+- STUDENTS_JSON → Keycloak Users
+- TEACHERS_JSON → Keycloak Users  
+- GROUPS_JSON → Keycloak Groups
 ```
 
 ---
@@ -382,6 +397,10 @@ Workflow muutub:
 | Ressurss | URL |
 |----------|-----|
 | HKHK-Skills | https://github.com/HKHK-Skills |
+| admin repo | https://github.com/HKHK-Skills/admin |
 | GitHub Education | https://education.github.com |
-| GitHub Classroom | https://classroom.github.com |
-| Keycloak | https://www.keycloak.org |
+| Campus Program | https://education.github.com/schools |
+
+---
+
+*Viimati uuendatud: Detsember 2025*

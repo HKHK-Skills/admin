@@ -103,12 +103,9 @@ jobs:
           
           rm /tmp/teachers.json /tmp/groups.json /tmp/students.json
 
-      - name: Generate GitHub App Token
+      - name: Set token
         id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+        run: echo "token=${{ secrets.GH_PAT }}" >> $GITHUB_OUTPUT
 
       - name: Check org
         id: check-org

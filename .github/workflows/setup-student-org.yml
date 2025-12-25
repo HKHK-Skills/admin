@@ -110,47 +110,15 @@ jobs:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      - name: Check org availability
+      - name: Check org
         id: check-org
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ORG_NAME: ${{ steps.config.outputs.org_name }}
-          FIRSTNAME: ${{ steps.config.outputs.firstname }}
-          LASTNAME: ${{ steps.config.outputs.lastname }}
         run: |
-          check_org() {
-            gh api "/orgs/$1" &>/dev/null && echo "taken" || echo "free"
-          }
-          
-          if [ "$(check_org "$ORG_NAME")" == "free" ]; then
-            echo "final_org=$ORG_NAME" >> $GITHUB_OUTPUT
-            echo "✅ Org available: $ORG_NAME"
-            exit 0
-          fi
-          
-          ALT1="${FIRSTNAME:0:2}${LASTNAME}"
-          if [ "$(check_org "$ALT1")" == "free" ]; then
-            echo "final_org=$ALT1" >> $GITHUB_OUTPUT
-            echo "✅ Org available: $ALT1"
-            exit 0
-          fi
-          
-          ALT2="${FIRSTNAME:0:3}${LASTNAME}"
-          if [ "$(check_org "$ALT2")" == "free" ]; then
-            echo "final_org=$ALT2" >> $GITHUB_OUTPUT
-            echo "✅ Org available: $ALT2"
-            exit 0
-          fi
-          
-          ALT3="${FIRSTNAME}${LASTNAME}"
-          if [ "$(check_org "$ALT3")" == "free" ]; then
-            echo "final_org=$ALT3" >> $GITHUB_OUTPUT
-            echo "✅ Org available: $ALT3"
-            exit 0
-          fi
-          
-          echo "❌ No available org name"
-          exit 1
+          # Use generated org name directly
+          echo "final_org=$ORG_NAME" >> $GITHUB_OUTPUT
+          echo "📋 Org name: $ORG_NAME"
 
       - name: Dry run
         if: ${{ inputs.dry_run }}

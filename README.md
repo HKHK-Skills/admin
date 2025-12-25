@@ -38,7 +38,6 @@ Kõik dünaamiline - muuda variables, mitte koodi!
 | Variable | Väärtus | Kirjeldus |
 |----------|---------|-----------|
 | `APP_ID` | `123456` | GitHub App ID |
-| `ORG_PREFIX` | `HKHK` | Õpilaste org'ide prefix |
 | `MATERIALS_ORG` | `HKHK-Skills` | Materjalide org |
 | `DEFAULT_BRANCH` | `main` | Default branch nimi |
 | `STUDENT_ROLE` | `member` | Õpilase roll oma org'is |
@@ -147,8 +146,8 @@ Kõik dünaamiline - muuda variables, mitte koodi!
 | Muster | Näide | Tüüp | Visibility |
 |--------|-------|------|------------|
 | `${MATERIALS_ORG}` | `HKHK-Skills` | Materjalid | Public |
-| `${ORG_PREFIX}-{github}` | `HKHK-jaan-tamm` | Õpilane | Private |
-| `${ORG_PREFIX}-{grupp}-{projekt}` | `HKHK-IT25-veebipood` | Projekt | Private |
+| `{eesnimi initial}{perenimi}` | `akreimann` | Õpilane | Private |
+| `{grupp}-{projekt}` | `IT25-veebipood` | Projekt | Private |
 
 ---
 

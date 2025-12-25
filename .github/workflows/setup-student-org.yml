@@ -3,8 +3,8 @@ name: Setup Student Organization
 on:
   workflow_dispatch:
     inputs:
-      student_github:
-        description: 'Student GitHub username'
+      student_email:
+        description: 'Student email (firstname.lastname@hkhk.edu.ee)'
         required: true
         type: string
       dry_run:
@@ -20,48 +20,50 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Load config and generate org name
+      - name: Generate org name from email
         id: config
         env:
-          STUDENTS_JSON: ${{ secrets.STUDENTS_JSON }}
           TEACHERS_JSON: ${{ secrets.TEACHERS_JSON }}
           GROUPS_JSON: ${{ secrets.GROUPS_JSON }}
-          STUDENT_GITHUB: ${{ inputs.student_github }}
+          STUDENTS_JSON: ${{ secrets.STUDENTS_JSON }}
+          STUDENT_EMAIL: ${{ inputs.student_email }}
         run: |
-          # Save to temp
-          echo "$STUDENTS_JSON" > /tmp/students.json
           echo "$TEACHERS_JSON" > /tmp/teachers.json
           echo "$GROUPS_JSON" > /tmp/groups.json
+          echo "$STUDENTS_JSON" > /tmp/students.json
           
-          # Find student
-          STUDENT=$(jq -r --arg gh "$STUDENT_GITHUB" '.[] | select(.github == $gh)' /tmp/students.json)
+          # Find student by email
+          STUDENT=$(jq -r --arg e "$STUDENT_EMAIL" '.[] | select(.email == $e)' /tmp/students.json)
           
           if [ -z "$STUDENT" ] || [ "$STUDENT" == "null" ]; then
-            echo "❌ Student $STUDENT_GITHUB not found"
+            echo "❌ Student with email $STUDENT_EMAIL not found"
             exit 1
           fi
           
-          # Get student info
-          EMAIL=$(echo "$STUDENT" | jq -r '.email')
           GROUP=$(echo "$STUDENT" | jq -r '.group')
-          NAME=$(echo "$STUDENT" | jq -r '.name // empty')
+          NAME=$(echo "$STUDENT" | jq -r '.name')
           
-          echo "✅ Student: $STUDENT_GITHUB"
-          echo "   Email: $EMAIL"
+          echo "✅ Student: $NAME"
+          echo "   Email: $STUDENT_EMAIL"
           echo "   Group: $GROUP"
           
           # Generate org name from email: alex.kreimann@hkhk.edu.ee → akreimann
-          # Format: first initial + lastname
-          EMAIL_PREFIX=$(echo "$EMAIL" | cut -d'@' -f1)  # alex.kreimann
-          FIRSTNAME=$(echo "$EMAIL_PREFIX" | cut -d'.' -f1)  # alex
-          LASTNAME=$(echo "$EMAIL_PREFIX" | cut -d'.' -f2)   # kreimann
-          INITIAL=$(echo "$FIRSTNAME" | cut -c1)             # a
+          EMAIL_PREFIX=$(echo "$STUDENT_EMAIL" | cut -d'@' -f1)
+          FIRSTNAME=$(echo "$EMAIL_PREFIX" | cut -d'.' -f1)
+          LASTNAME=$(echo "$EMAIL_PREFIX" | cut -d'.' -f2)
           
-          # Generate org name: akreimann
-          ORG_NAME="${INITIAL}${LASTNAME}"
+          # Handle Estonian chars
+          normalize() {
+            echo "$1" | tr '[:upper:]' '[:lower:]' | \
+              sed 's/ä/a/g; s/ö/o/g; s/ü/u/g; s/õ/o/g; s/š/s/g; s/ž/z/g' | \
+              tr -cd 'a-z0-9-'
+          }
           
-          # Normalize: lowercase, remove special chars
-          ORG_NAME=$(echo "$ORG_NAME" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-')
+          FIRSTNAME_NORM=$(normalize "$FIRSTNAME")
+          LASTNAME_NORM=$(normalize "$LASTNAME")
+          INITIAL_NORM=$(echo "$FIRSTNAME_NORM" | cut -c1)
+          
+          ORG_NAME="${INITIAL_NORM}${LASTNAME_NORM}"
           
           echo "📋 Generated org name: $ORG_NAME"
           
@@ -71,19 +73,18 @@ jobs:
           # Find OWNER teachers
           OWNERS=$(jq -c '[.[] | select(.role == "owner")]' /tmp/teachers.json)
           
-          # Find ADMIN teachers (subjects match)
+          # Find ADMIN teachers
           ADMINS=$(jq -c --argjson subjs "$SUBJECTS" '
             [.[] | select(.role == "admin") | select(
               .subjects as $ts | ($subjs | any(. as $s | $ts | index($s)))
             )]
           ' /tmp/teachers.json)
           
-          # Set outputs
           echo "org_name=$ORG_NAME" >> $GITHUB_OUTPUT
           echo "group=$GROUP" >> $GITHUB_OUTPUT
-          echo "email=$EMAIL" >> $GITHUB_OUTPUT
-          echo "firstname=$FIRSTNAME" >> $GITHUB_OUTPUT
-          echo "lastname=$LASTNAME" >> $GITHUB_OUTPUT
+          echo "student_name=$NAME" >> $GITHUB_OUTPUT
+          echo "firstname=$FIRSTNAME_NORM" >> $GITHUB_OUTPUT
+          echo "lastname=$LASTNAME_NORM" >> $GITHUB_OUTPUT
           {
             echo "subjects<<EOF"
             echo "$SUBJECTS"
@@ -100,7 +101,7 @@ jobs:
             echo "EOF"
           } >> $GITHUB_OUTPUT
           
-          rm /tmp/students.json /tmp/teachers.json /tmp/groups.json
+          rm /tmp/teachers.json /tmp/groups.json /tmp/students.json
 
       - name: Generate GitHub App Token
         id: app-token
@@ -108,7 +109,6 @@ jobs:
         with:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          owner: ${{ steps.config.outputs.org_name }}
 
       - name: Check org availability
         id: check-org
@@ -118,21 +118,16 @@ jobs:
           FIRSTNAME: ${{ steps.config.outputs.firstname }}
           LASTNAME: ${{ steps.config.outputs.lastname }}
         run: |
-          # Check if org exists
           check_org() {
             gh api "/orgs/$1" &>/dev/null && echo "taken" || echo "free"
           }
           
-          # Try original: akreimann
           if [ "$(check_org "$ORG_NAME")" == "free" ]; then
             echo "final_org=$ORG_NAME" >> $GITHUB_OUTPUT
             echo "✅ Org available: $ORG_NAME"
             exit 0
           fi
           
-          echo "⚠️ $ORG_NAME is taken, trying alternatives..."
-          
-          # Try with 2 chars: alkreimann
           ALT1="${FIRSTNAME:0:2}${LASTNAME}"
           if [ "$(check_org "$ALT1")" == "free" ]; then
             echo "final_org=$ALT1" >> $GITHUB_OUTPUT
@@ -140,7 +135,6 @@ jobs:
             exit 0
           fi
           
-          # Try with 3 chars: alekreimann
           ALT2="${FIRSTNAME:0:3}${LASTNAME}"
           if [ "$(check_org "$ALT2")" == "free" ]; then
             echo "final_org=$ALT2" >> $GITHUB_OUTPUT
@@ -148,7 +142,6 @@ jobs:
             exit 0
           fi
           
-          # Try full name: alexkreimann
           ALT3="${FIRSTNAME}${LASTNAME}"
           if [ "$(check_org "$ALT3")" == "free" ]; then
             echo "final_org=$ALT3" >> $GITHUB_OUTPUT
@@ -156,14 +149,15 @@ jobs:
             exit 0
           fi
           
-          echo "❌ No available org name found"
+          echo "❌ No available org name"
           exit 1
 
       - name: Dry run
         if: ${{ inputs.dry_run }}
         env:
           ORG: ${{ steps.check-org.outputs.final_org }}
-          STUDENT: ${{ inputs.student_github }}
+          STUDENT_EMAIL: ${{ inputs.student_email }}
+          STUDENT_NAME: ${{ steps.config.outputs.student_name }}
           GROUP: ${{ steps.config.outputs.group }}
           SUBJECTS: ${{ steps.config.outputs.subjects }}
           OWNERS: ${{ steps.config.outputs.owners }}
@@ -175,120 +169,80 @@ jobs:
           echo "📋 ORG: $ORG"
           echo "══════════════════════════════════════"
           echo ""
-          echo "══════════════════════════════════════"
           echo "👤 STUDENT"
-          echo "══════════════════════════════════════"
-          echo "   GitHub: $STUDENT"
+          echo "   Email: $STUDENT_EMAIL"
           echo "   Group: $GROUP"
-          echo "   Org role: member"
-          echo "   Repo role: write"
+          echo "   Invite: EMAIL"
           echo ""
-          echo "══════════════════════════════════════"
-          echo "👑 OWNERS (org: owner)"
-          echo "══════════════════════════════════════"
+          echo "👑 OWNERS"
           echo "$OWNERS" | jq -r '.[] | "   - \(.github)"'
           echo ""
-          echo "══════════════════════════════════════"
-          echo "👨‍🏫 ADMINS (org: admin)"
-          echo "══════════════════════════════════════"
+          echo "👨‍🏫 ADMINS"
           echo "$ADMINS" | jq -r '.[] | "   - \(.github) [\(.subjects | join(", "))]"'
           echo ""
-          echo "══════════════════════════════════════"
           echo "📁 REPOS"
-          echo "══════════════════════════════════════"
           echo "$SUBJECTS" | jq -r '.[]' | while read -r subj; do
             REPO=$(jq -r --arg s "$subj" '.[$s].material_repo' config/subjects.json)
-            NAME=$(jq -r --arg s "$subj" '.[$s].name' config/subjects.json)
-            echo "   - ${REPO}-labs ($NAME)"
+            echo "   - ${REPO}-labs"
           done
           echo "   - portfolio"
-          echo ""
-          echo "══════════════════════════════════════"
-          echo "📊 PERMISSION MATRIX"
-          echo "══════════════════════════════════════"
-          printf "   %-20s %-12s %-12s\n" "User" "Org Role" "Repo Role"
-          printf "   %-20s %-12s %-12s\n" "--------------------" "------------" "------------"
-          echo "$OWNERS" | jq -r '.[] | .github' | while read -r u; do
-            printf "   %-20s %-12s %-12s\n" "$u" "owner" "admin"
-          done
-          echo "$ADMINS" | jq -r '.[] | .github' | while read -r u; do
-            printf "   %-20s %-12s %-12s\n" "$u" "admin" "admin"
-          done
-          printf "   %-20s %-12s %-12s\n" "$STUDENT" "member" "write"
 
-      - name: Setup org
+      - name: Setup org (LIVE)
         if: ${{ !inputs.dry_run }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ORG: ${{ steps.check-org.outputs.final_org }}
-          STUDENT: ${{ inputs.student_github }}
+          STUDENT_EMAIL: ${{ inputs.student_email }}
           SUBJECTS: ${{ steps.config.outputs.subjects }}
           OWNERS: ${{ steps.config.outputs.owners }}
           ADMINS: ${{ steps.config.outputs.admins }}
         run: |
           echo "🚀 Setting up $ORG"
           
-          get_user_id() {
-            gh api "/users/$1" --jq '.id' 2>/dev/null || echo ""
-          }
+          if ! gh api "/orgs/$ORG" &>/dev/null; then
+            echo "❌ Org $ORG does not exist!"
+            echo "👉 Create manually: https://github.com/organizations/new"
+            echo "   Name: $ORG"
+            exit 1
+          fi
           
-          invite_user() {
+          invite_by_username() {
             local user=$1
             local role=$2
-            local user_id=$(get_user_id "$user")
-            
-            if [ -z "$user_id" ]; then
-              echo "   ⚠️ User $user not found"
-              return 1
-            fi
+            local user_id=$(gh api "/users/$user" --jq '.id' 2>/dev/null)
             
             gh api -X POST "/orgs/$ORG/invitations" \
               -f invitee_id="$user_id" \
               -f role="$role" \
-              2>/dev/null && echo "   ✅ $user → $role" || echo "   ⚠️ $user (exists/pending)"
+              2>/dev/null && echo "   ✅ $user → $role" || echo "   ⚠️ $user"
           }
           
           echo ""
           echo "👑 Inviting OWNERS"
           echo "$OWNERS" | jq -r '.[].github' | while read -r user; do
-            invite_user "$user" "admin"
+            invite_by_username "$user" "admin"
           done
           
           echo ""
-          echo "👨‍🏫 Inviting ADMINS"
+          echo "👨‍🏫 Inviting ADMINS"  
           echo "$ADMINS" | jq -r '.[].github' | while read -r user; do
-            invite_user "$user" "admin"
+            invite_by_username "$user" "admin"
           done
           
           echo ""
-          echo "👤 Inviting STUDENT"
-          invite_user "$STUDENT" "direct_member"
+          echo "👤 Inviting STUDENT (email)"
+          gh api -X POST "/orgs/$ORG/invitations" \
+            -f email="$STUDENT_EMAIL" \
+            -f role="direct_member" \
+            2>/dev/null && echo "   ✅ $STUDENT_EMAIL" || echo "   ⚠️ failed"
           
           echo ""
           echo "📁 Creating REPOS"
-          
-          create_repo() {
-            local name=$1
-            local desc=$2
-            
-            gh repo create "$ORG/$name" \
-              --private \
-              --description "$desc" \
-              --add-readme \
-              2>/dev/null && echo "   ✅ $name" || echo "   ⚠️ $name (exists)"
-            
-            gh api -X PUT "/repos/$ORG/$name/collaborators/$STUDENT" \
-              -f permission="push" \
-              2>/dev/null || true
-          }
-          
           echo "$SUBJECTS" | jq -r '.[]' | while read -r subj; do
             REPO=$(jq -r --arg s "$subj" '.[$s].material_repo' config/subjects.json)
-            NAME=$(jq -r --arg s "$subj" '.[$s].name' config/subjects.json)
-            create_repo "${REPO}-labs" "Lab: $NAME"
+            gh repo create "$ORG/$REPO-labs" --private --add-readme 2>/dev/null && echo "   ✅ $REPO-labs" || echo "   ⚠️ $REPO-labs"
           done
-          
-          create_repo "portfolio" "Professional portfolio"
+          gh repo create "$ORG/portfolio" --private --add-readme 2>/dev/null && echo "   ✅ portfolio" || echo "   ⚠️ portfolio"
           
           echo ""
-          echo "✅ Setup complete: https://github.com/$ORG"
+          echo "✅ Done: https://github.com/$ORG"

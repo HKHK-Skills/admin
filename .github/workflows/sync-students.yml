@@ -1,9 +1,16 @@
-# Sync Students from Secret
+# Sync Students
 #
-# SEADISTAMINE:
-# 1. Secret: STUDENTS_JSON (või STUDENTS_JSON_TEST)
-# 2. Secret: APP_PRIVATE_KEY  
-# 3. Variable: APP_ID
+# Sünkroniseerib õpilased HKHK-Skills organisatsiooni teams'idesse.
+#
+# Mida teeb:
+#   - Loob teams: students-{grupp} (nt students-IT-25)
+#   - Lisab õpilased õigetesse team'idesse STUDENTS_JSON põhjal
+#   - Annab team'idele read õigused materjalide repodele
+#
+# Eeldused:
+#   - GH_PAT või APP_PRIVATE_KEY secret
+#   - STUDENTS_JSON secret
+#
 
 name: Sync Students
 

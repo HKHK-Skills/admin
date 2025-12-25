@@ -239,20 +239,59 @@ See fail on PUBLIC - ei sisalda isikuandmeid, ainult ainete info.
 
 ## Workflows
 
+| Workflow | Eesmärk | Staatus |
+|----------|---------|--------|
+| `setup-student-org.yml` | Seadistab õpilase org'i (kutsed, repod) | ✅ Töötab |
+| `create-student-org.yml` | Üritab org'i API kaudu luua, kutsub setup | ⚠️ Vajab uuendust (kasutab App, mitte PAT) |
+| `setup-roles.yml` | Loob custom repository roles | ⚠️ Vajab Team/Enterprise plaani |
+| `sync-students.yml` | Sünkib teams HKHK-Skills'is | ✅ Töötab |
+
+---
+
 ### setup-student-org.yml
 
 **Trigger:** Manual (workflow_dispatch)
 
-**Input:** `student_email` (nt `alex.kreimann@hkhk.edu.ee`)
+**Input:** `student_email` (nt `eesnimi.perenimi@hkhk.edu.ee`)
 
 **Mida teeb:**
 1. Leiab õpilase STUDENTS_JSON'ist emaili järgi
-2. Genereerib org nime: `alex.kreimann` → `akreimann`
+2. Genereerib org nime: `eesnimi.perenimi` → `eperenimi`
 3. Kontrollib kas org eksisteerib (kui ei → juhised käsitsi loomiseks)
-4. Kutsub owner õpetajad
+4. Kutsub owner õpetajad (TEACHERS_JSON `role: owner`)
 5. Kutsub admin õpetajad (kelle ained kattuvad grupi ainetega)
 6. Kutsub õpilase (emailile)
-7. Loob repod: `{aine}-labs` + `portfolio`
+7. Loob repod: `{material_repo}` + `portfolio`
+
+---
+
+### create-student-org.yml
+
+**Trigger:** Manual (workflow_dispatch)
+
+**Input:** `student_github` (GitHub username)
+
+**Mida teeb:**
+1. Üritab org'i luua API kaudu (vajab Enterprise/Campus)
+2. Kui õnnestub → kutsub `setup-student-org.yml`
+3. Kui ei õnnestu → annab juhised käsitsi loomiseks
+
+**NB:** Praegu kasutab GitHub App tokenit. Vajab uuendust PAT kasutamiseks.
+
+---
+
+### setup-roles.yml
+
+**Trigger:** Manual (workflow_dispatch)
+
+**Input:** `org_name`
+
+**Mida teeb:**
+- Loob custom repository roles `config/roles.json` põhjal
+
+**NB:** Custom roles vajab GitHub Team või Enterprise plaani. Free plaanil ei tööta.
+
+---
 
 ### sync-students.yml
 
@@ -325,12 +364,14 @@ See fail on PUBLIC - ei sisalda isikuandmeid, ainult ainete info.
 ```
 admin/
 ├── config/
-│   └── subjects.json            # Ainete definitsioonid (PUBLIC)
+│   └── subjects.json              # Ainete definitsioonid (PUBLIC)
 │
 ├── .github/
 │   └── workflows/
-│       ├── setup-student-org.yml    # Seadistab õpilase org'i
-│       ├── sync-students.yml        # Sünkib teams
+│       ├── setup-student-org.yml    # ✅ Seadistab õpilase org'i
+│       ├── create-student-org.yml   # ⚠️ Loob org'i (vajab uuendust)
+│       ├── setup-roles.yml          # ⚠️ Custom roles (vajab Team/Enterprise)
+│       ├── sync-students.yml        # ✅ Sünkib teams
 │       ├── update-semester.yml      # TODO
 │       └── transfer-ownership.yml   # TODO
 │

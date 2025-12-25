@@ -1,3 +1,19 @@
+# Setup Roles
+#
+# Loob custom repository roles organisatsioonile.
+#
+# NB: Custom roles vajab GitHub Team või Enterprise plaani!
+#     Free plaanil ei tööta - kasuta base roles:
+#     - read: Clone, view
+#     - triage: + manage issues/PRs  
+#     - write: + push
+#     - maintain: + manage repo (no delete)
+#     - admin: full access
+#
+# Eeldused:
+#   - config/roles.json on olemas
+#   - GitHub Team või Enterprise plaan
+#
 name: Setup Roles
 
 on:

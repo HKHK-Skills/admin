@@ -1,3 +1,16 @@
+# Create Student Organization
+#
+# Üritab luua õpilase organisatsiooni GitHub API kaudu.
+#
+# NB: Org loomine API kaudu vajab:
+#   - GitHub Enterprise, VÕI
+#   - GitHub Campus Program
+#   Free plaanil ei tööta - annab juhised käsitsi loomiseks.
+#
+# Kui org loomine õnnestub, kutsub automaatselt setup-student-org.yml
+#
+# Praegu kasutab APP_PRIVATE_KEY, Campus saamisel töötab API.
+#
 name: Create Student Organization
 
 on:

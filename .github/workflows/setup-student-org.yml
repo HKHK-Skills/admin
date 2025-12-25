@@ -1,3 +1,27 @@
+# Setup Student Organization
+#
+# Seadistab õpilase GitHub organisatsiooni:
+#   - Kutsub õpetajad (owner + admin)
+#   - Kutsub õpilase (email)
+#   - Loob repod (ainete kaupa + portfolio)
+#
+# Eeldused:
+#   - Org on juba loodud (käsitsi või create-student-org.yml kaudu)
+#   - GH_PAT secret on seadistatud õigete scope'idega (repo, admin:org, read:user)
+#   - STUDENTS_JSON, TEACHERS_JSON, GROUPS_JSON secrets on olemas
+#   - config/subjects.json on olemas
+#
+# Org nime genereerimine emailist:
+#   eesnimi.perenimi@hkhk.edu.ee → eperenimi
+#   Täpitähed normaliseeritakse: ä→a, ö→o, ü→u, õ→o
+#
+# Kasutamine:
+#   1. Lisa õpilane STUDENTS_JSON secreti
+#   2. Loo org käsitsi: github.com/organizations/new
+#   3. Käivita see workflow
+#   4. Dry run = true → vaata mida teeks
+#   5. Dry run = false → käivita päriselt
+#
 name: Setup Student Organization
 
 on:
@@ -148,7 +172,7 @@ jobs:
           echo "📁 REPOS"
           echo "$SUBJECTS" | jq -r '.[]' | while read -r subj; do
             REPO=$(jq -r --arg s "$subj" '.[$s].material_repo' config/subjects.json)
-            echo "   - ${REPO}-labs"
+            echo "   - ${REPO}"
           done
           echo "   - portfolio"
 
@@ -176,8 +200,13 @@ jobs:
             local role=$2
             local user_id=$(gh api "/users/$user" --jq '.id' 2>/dev/null)
             
+            if [ -z "$user_id" ] || [ "$user_id" == "null" ]; then
+              echo "   ⚠️ $user (user not found)"
+              return 1
+            fi
+            
             gh api -X POST "/orgs/$ORG/invitations" \
-              -f invitee_id="$user_id" \
+              -F invitee_id=$user_id \
               -f role="$role" \
               2>/dev/null && echo "   ✅ $user → $role" || echo "   ⚠️ $user"
           }
@@ -205,7 +234,7 @@ jobs:
           echo "📁 Creating REPOS"
           echo "$SUBJECTS" | jq -r '.[]' | while read -r subj; do
             REPO=$(jq -r --arg s "$subj" '.[$s].material_repo' config/subjects.json)
-            gh repo create "$ORG/$REPO-labs" --private --add-readme 2>/dev/null && echo "   ✅ $REPO-labs" || echo "   ⚠️ $REPO-labs"
+            gh repo create "$ORG/$REPO" --private --add-readme 2>/dev/null && echo "   ✅ $REPO" || echo "   ⚠️ $REPO"
           done
           gh repo create "$ORG/portfolio" --private --add-readme 2>/dev/null && echo "   ✅ portfolio" || echo "   ⚠️ portfolio"
           

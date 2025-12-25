@@ -1,0 +1,80 @@
+name: Setup Roles
+
+on:
+  workflow_dispatch:
+    inputs:
+      org_name:
+        description: 'Organization name'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  setup-roles:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ inputs.org_name }}
+
+      - name: Setup roles
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ORG_NAME: ${{ inputs.org_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          echo "📋 Setting up roles for $ORG_NAME"
+          
+          # Read roles config
+          ROLES=$(cat config/roles.json)
+          
+          # Loop through each role
+          echo "$ROLES" | jq -c 'to_entries[]' | while read -r role_entry; do
+            ROLE_KEY=$(echo "$role_entry" | jq -r '.key')
+            ROLE=$(echo "$role_entry" | jq -r '.value')
+            
+            ROLE_NAME=$(echo "$ROLE" | jq -r '.name')
+            ROLE_DESC=$(echo "$ROLE" | jq -r '.description')
+            BASE_ROLE=$(echo "$ROLE" | jq -r '.base_role')
+            
+            echo ""
+            echo "🔧 Role: $ROLE_NAME"
+            echo "   Base: $BASE_ROLE"
+            echo "   Description: $ROLE_DESC"
+            
+            if [ "$DRY_RUN" == "true" ]; then
+              echo "   🔍 DRY RUN - would create role"
+              continue
+            fi
+            
+            # Check if custom roles are available (requires Team/Enterprise)
+            # For Free plan, we use base roles only
+            
+            # Create custom repository role (if available)
+            gh api -X POST "/orgs/$ORG_NAME/custom-repository-roles" \
+              -f name="$ROLE_NAME" \
+              -f description="$ROLE_DESC" \
+              -f base_role="$BASE_ROLE" \
+              2>/dev/null || echo "   ⚠️ Custom roles not available (requires Team/Enterprise)"
+          done
+          
+          echo ""
+          echo "✅ Roles setup complete"
+          echo ""
+          echo "📋 Available base roles (Free plan):"
+          echo "   - read: Clone, view"
+          echo "   - triage: + manage issues/PRs"
+          echo "   - write: + push"
+          echo "   - maintain: + manage repo (no delete)"
+          echo "   - admin: full access"

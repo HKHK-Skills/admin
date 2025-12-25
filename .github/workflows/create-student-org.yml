@@ -1,0 +1,90 @@
+name: Create Student Organization
+
+on:
+  workflow_dispatch:
+    inputs:
+      student_github:
+        description: 'Student GitHub username'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run (no changes)'
+        required: false
+        type: boolean
+        default: true
+
+env:
+  ORG_PREFIX: HKHK
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    outputs:
+      org_name: ${{ steps.create.outputs.org_name }}
+      
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Create Organization
+        id: create
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          STUDENT: ${{ inputs.student_github }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          ORG_NAME="${ORG_PREFIX}-${STUDENT}"
+          echo "org_name=$ORG_NAME" >> $GITHUB_OUTPUT
+          
+          echo "📋 Creating org: $ORG_NAME"
+          
+          if [ "$DRY_RUN" == "true" ]; then
+            echo "🔍 DRY RUN - would create: $ORG_NAME"
+            exit 0
+          fi
+          
+          # Check if org exists
+          if gh api "/orgs/$ORG_NAME" &>/dev/null; then
+            echo "⚠️ Org $ORG_NAME already exists"
+            exit 0
+          fi
+          
+          # Create org via API
+          # NB: Requires GitHub App with org:write permission
+          # OR Enterprise/Campus Program
+          
+          RESPONSE=$(gh api -X POST /organizations \
+            -f login="$ORG_NAME" \
+            -f admin="$(gh api /user --jq '.login')" \
+            2>&1) || {
+            echo "❌ Failed to create org via API"
+            echo "$RESPONSE"
+            echo ""
+            echo "⚠️ Org creation via API requires:"
+            echo "   - GitHub Enterprise, OR"
+            echo "   - GitHub Campus Program, OR"  
+            echo "   - GitHub App with organization:write permission"
+            echo ""
+            echo "👉 Create manually: https://github.com/organizations/new"
+            echo "   Org name: $ORG_NAME"
+            exit 1
+          }
+          
+          echo "✅ Created: https://github.com/$ORG_NAME"
+
+  setup:
+    needs: create
+    if: ${{ !inputs.dry_run }}
+    uses: ./.github/workflows/setup-student-org.yml
+    with:
+      student_github: ${{ inputs.student_github }}
+      org_name: ${{ needs.create.outputs.org_name }}
+      dry_run: false
+    secrets: inherit

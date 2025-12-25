@@ -1,0 +1,79 @@
+{
+  "DOK": {
+    "code": "DOK",
+    "name": "Dokumentatsiooni loomine",
+    "name_en": "Documentation",
+    "module": "Oskused eluks ja tööks",
+    "material_repo": "dokumentatsioon"
+  },
+  "DIG": {
+    "code": "DIG",
+    "name": "Digisisu loomine",
+    "name_en": "Digital Content",
+    "module": "Digioskuste arendamine",
+    "material_repo": "digisisu"
+  },
+  "SEC": {
+    "code": "SEC",
+    "name": "Digiturvalisus ja probleemilahendus",
+    "name_en": "Digital Security",
+    "module": "Digioskuste arendamine",
+    "material_repo": "digiturvalisus"
+  },
+  "OPS": {
+    "code": "OPS",
+    "name": "Op.süsteemide ja küberturbe alused",
+    "name_en": "OS and Cybersecurity Basics",
+    "module": "IT valdkonna alusteadmised",
+    "material_repo": "opsusteemid"
+  },
+  "ITI": {
+    "code": "ITI",
+    "name": "Sissejuhatus IT valdkonda ja IT töökoht",
+    "name_en": "Introduction to IT",
+    "module": "IT valdkonna alusteadmised",
+    "material_repo": "sissejuhatus-it"
+  },
+  "NET": {
+    "code": "NET",
+    "name": "Arvutivõrkude alused",
+    "name_en": "Networking Basics",
+    "module": "IT valdkonna alusteadmised",
+    "material_repo": "arvutivorgud"
+  },
+  "WIN": {
+    "code": "WIN",
+    "name": "Windows operatsioonisüsteemid",
+    "name_en": "Windows OS",
+    "module": "Põhiõpingud",
+    "material_repo": "windows"
+  },
+  "LIN": {
+    "code": "LIN",
+    "name": "Linux operatsioonisüsteemide haldus",
+    "name_en": "Linux Administration",
+    "module": "Põhiõpingud",
+    "material_repo": "linux"
+  },
+  "SKR": {
+    "code": "SKR",
+    "name": "Skriptimisvahendid",
+    "name_en": "Scripting Tools",
+    "module": "Valiõpingud",
+    "material_repo": "skriptimine"
+  },
+  "MIC": {
+    "code": "MIC",
+    "name": "Mikrokontrollerid ja robootika",
+    "name_en": "Microcontrollers and Robotics",
+    "module": "Valiõpingud",
+    "material_repo": "mikrokontrollerid"
+  },
+  "PRO": {
+    "code": "PRO",
+    "name": "Programmeerimise alused",
+    "name_en": "Programming Basics",
+    "module": "Põhiõpingud",
+    "material_repo": "programmeerimine"
+  }
+}

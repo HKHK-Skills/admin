@@ -1,0 +1,73 @@
+{
+  "org_roles": {
+    "owner": {
+      "name": "Owner",
+      "description": "Org omanik - täielik kontroll, backup, transfer",
+      "github_role": "owner",
+      "assign_to": "role:owner in TEACHERS_JSON"
+    },
+    "admin": {
+      "name": "Admin", 
+      "description": "Org admin - liikmete ja repo haldus",
+      "github_role": "admin",
+      "assign_to": "role:admin in TEACHERS_JSON"
+    },
+    "member": {
+      "name": "Member",
+      "description": "Org liige - base permissions",
+      "github_role": "member",
+      "assign_to": "students"
+    }
+  },
+  "repo_roles": {
+    "admin": {
+      "name": "Repo Admin",
+      "description": "Täielik repo kontroll - seaded, kustutamine",
+      "github_role": "admin",
+      "can": ["settings", "delete", "push", "pull", "issues", "discussions"]
+    },
+    "maintain": {
+      "name": "Maintainer",
+      "description": "Repo haldus - seaded ilma kustutamiseta",
+      "github_role": "maintain",
+      "can": ["settings", "push", "pull", "issues", "discussions"]
+    },
+    "write": {
+      "name": "Writer",
+      "description": "Kirjutamine - push, PR, issues",
+      "github_role": "write",
+      "can": ["push", "pull", "issues", "discussions"]
+    },
+    "triage": {
+      "name": "Triage",
+      "description": "Issues/PR haldus - ilma pushita",
+      "github_role": "triage",
+      "can": ["pull", "issues", "discussions", "labels"]
+    },
+    "read": {
+      "name": "Reader",
+      "description": "Ainult lugemine",
+      "github_role": "read",
+      "can": ["pull", "view"]
+    }
+  },
+  "assignments": {
+    "materials_org": {
+      "description": "HKHK-Skills - materjalide org",
+      "owner": ["role:owner teachers"],
+      "admin": ["role:admin teachers"],
+      "read": ["all students via teams"]
+    },
+    "student_org": {
+      "description": "HKHK-{username} - õpilase org",
+      "owner": ["role:owner teachers"],
+      "admin": ["teachers whose subjects ∩ group.current_subjects"],
+      "member": ["student"]
+    },
+    "student_repos": {
+      "description": "Repos õpilase org'is",
+      "admin": ["org admins (teachers)"],
+      "write": ["student"]
+    }
+  }
+}

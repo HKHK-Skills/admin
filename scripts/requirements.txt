@@ -1,0 +1,3 @@
+# HKHK Student Org Creator - Requirements
+
+playwright>=1.40.0

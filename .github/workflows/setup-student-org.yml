@@ -1,0 +1,238 @@
+name: Setup Student Organization
+
+on:
+  workflow_dispatch:
+    inputs:
+      student_github:
+        description: 'Student GitHub username'
+        required: true
+        type: string
+      org_name:
+        description: 'Student org name (e.g., HKHK-jaan-tamm)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run (no changes)'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ inputs.org_name }}
+
+      - name: Load config
+        id: config
+        env:
+          STUDENTS_JSON: ${{ secrets.STUDENTS_JSON }}
+          TEACHERS_JSON: ${{ secrets.TEACHERS_JSON }}
+          GROUPS_JSON: ${{ secrets.GROUPS_JSON }}
+          STUDENT_GITHUB: ${{ inputs.student_github }}
+        run: |
+          # Save to temp
+          echo "$STUDENTS_JSON" > /tmp/students.json
+          echo "$TEACHERS_JSON" > /tmp/teachers.json
+          echo "$GROUPS_JSON" > /tmp/groups.json
+          
+          # Find student
+          STUDENT=$(jq -r --arg gh "$STUDENT_GITHUB" '.[] | select(.github == $gh)' /tmp/students.json)
+          
+          if [ -z "$STUDENT" ] || [ "$STUDENT" == "null" ]; then
+            echo "❌ Student $STUDENT_GITHUB not found"
+            exit 1
+          fi
+          
+          GROUP=$(echo "$STUDENT" | jq -r '.group')
+          echo "✅ Student: $STUDENT_GITHUB, Group: $GROUP"
+          
+          # Get subjects for this group
+          SUBJECTS=$(jq -r --arg g "$GROUP" '.[$g].current_subjects' /tmp/groups.json)
+          echo "📚 Subjects: $SUBJECTS"
+          
+          # Find OWNER teachers (role: owner)
+          OWNERS=$(jq -c '[.[] | select(.role == "owner")]' /tmp/teachers.json)
+          echo "👑 Owners: $OWNERS"
+          
+          # Find ADMIN teachers (subjects match group's current_subjects)
+          ADMINS=$(jq -c --argjson subjs "$SUBJECTS" '
+            [.[] | select(.role == "admin") | select(
+              .subjects as $ts | ($subjs | any(. as $s | $ts | index($s)))
+            )]
+          ' /tmp/teachers.json)
+          echo "👨‍🏫 Admins: $ADMINS"
+          
+          # Set outputs
+          echo "group=$GROUP" >> $GITHUB_OUTPUT
+          {
+            echo "subjects<<EOF"
+            echo "$SUBJECTS"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+          {
+            echo "owners<<EOF"
+            echo "$OWNERS"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+          {
+            echo "admins<<EOF"
+            echo "$ADMINS"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+          
+          rm /tmp/students.json /tmp/teachers.json /tmp/groups.json
+
+      - name: Dry run
+        if: ${{ inputs.dry_run }}
+        env:
+          ORG: ${{ inputs.org_name }}
+          STUDENT: ${{ inputs.student_github }}
+          GROUP: ${{ steps.config.outputs.group }}
+          SUBJECTS: ${{ steps.config.outputs.subjects }}
+          OWNERS: ${{ steps.config.outputs.owners }}
+          ADMINS: ${{ steps.config.outputs.admins }}
+        run: |
+          echo "🔍 DRY RUN - $ORG"
+          echo ""
+          echo "══════════════════════════════════════"
+          echo "📋 STUDENT"
+          echo "══════════════════════════════════════"
+          echo "   GitHub: $STUDENT"
+          echo "   Group: $GROUP"
+          echo "   Org role: member"
+          echo "   Repo role: write"
+          echo ""
+          echo "══════════════════════════════════════"
+          echo "👑 OWNERS (org: owner)"
+          echo "══════════════════════════════════════"
+          echo "$OWNERS" | jq -r '.[] | "   - \(.github)"'
+          echo ""
+          echo "══════════════════════════════════════"
+          echo "👨‍🏫 ADMINS (org: admin, repo: admin)"
+          echo "══════════════════════════════════════"
+          echo "$ADMINS" | jq -r '.[] | "   - \(.github) [\(.subjects | join(", "))]"'
+          echo ""
+          echo "══════════════════════════════════════"
+          echo "📁 REPOS (student: write, teachers: admin)"
+          echo "══════════════════════════════════════"
+          echo "$SUBJECTS" | jq -r '.[]' | while read -r subj; do
+            REPO=$(jq -r --arg s "$subj" '.[$s].material_repo' config/subjects.json)
+            NAME=$(jq -r --arg s "$subj" '.[$s].name' config/subjects.json)
+            echo "   - ${REPO}-labs ($NAME)"
+          done
+          echo "   - portfolio"
+          echo ""
+          echo "══════════════════════════════════════"
+          echo "📊 PERMISSION MATRIX"
+          echo "══════════════════════════════════════"
+          echo "   ┌─────────────┬───────────┬───────────┐"
+          echo "   │ User        │ Org Role  │ Repo Role │"
+          echo "   ├─────────────┼───────────┼───────────┤"
+          echo "$OWNERS" | jq -r '.[] | "   │ \(.github | .[0:11])  │ owner     │ admin     │"'
+          echo "$ADMINS" | jq -r '.[] | "   │ \(.github | .[0:11])  │ admin     │ admin     │"'
+          echo "   │ $STUDENT  │ member    │ write     │"
+          echo "   └─────────────┴───────────┴───────────┘"
+
+      - name: Setup org
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ORG: ${{ inputs.org_name }}
+          STUDENT: ${{ inputs.student_github }}
+          SUBJECTS: ${{ steps.config.outputs.subjects }}
+          OWNERS: ${{ steps.config.outputs.owners }}
+          ADMINS: ${{ steps.config.outputs.admins }}
+        run: |
+          echo "🚀 Setting up $ORG"
+          echo ""
+          
+          # Get user IDs
+          get_user_id() {
+            gh api "/users/$1" --jq '.id' 2>/dev/null || echo ""
+          }
+          
+          # Invite with role
+          invite_user() {
+            local user=$1
+            local role=$2
+            local user_id=$(get_user_id "$user")
+            
+            if [ -z "$user_id" ]; then
+              echo "   ⚠️ User $user not found"
+              return 1
+            fi
+            
+            gh api -X POST "/orgs/$ORG/invitations" \
+              -f invitee_id="$user_id" \
+              -f role="$role" \
+              2>/dev/null && echo "   ✅ $user → $role" || echo "   ⚠️ $user (exists/pending)"
+          }
+          
+          echo "══════════════════════════════════════"
+          echo "👑 Inviting OWNERS"
+          echo "══════════════════════════════════════"
+          echo "$OWNERS" | jq -r '.[].github' | while read -r user; do
+            invite_user "$user" "admin"  # owner via API = admin + manual promote
+          done
+          
+          echo ""
+          echo "══════════════════════════════════════"
+          echo "👨‍🏫 Inviting ADMINS"
+          echo "══════════════════════════════════════"
+          echo "$ADMINS" | jq -r '.[].github' | while read -r user; do
+            invite_user "$user" "admin"
+          done
+          
+          echo ""
+          echo "══════════════════════════════════════"
+          echo "👤 Inviting STUDENT"
+          echo "══════════════════════════════════════"
+          invite_user "$STUDENT" "direct_member"
+          
+          echo ""
+          echo "══════════════════════════════════════"
+          echo "📁 Creating REPOS"
+          echo "══════════════════════════════════════"
+          
+          create_repo() {
+            local name=$1
+            local desc=$2
+            
+            gh repo create "$ORG/$name" \
+              --private \
+              --description "$desc" \
+              --add-readme \
+              2>/dev/null && echo "   ✅ $name" || echo "   ⚠️ $name (exists)"
+            
+            # Set student write permission
+            gh api -X PUT "/repos/$ORG/$name/collaborators/$STUDENT" \
+              -f permission="push" \
+              2>/dev/null || true
+          }
+          
+          echo "$SUBJECTS" | jq -r '.[]' | while read -r subj; do
+            REPO=$(jq -r --arg s "$subj" '.[$s].material_repo' config/subjects.json)
+            NAME=$(jq -r --arg s "$subj" '.[$s].name' config/subjects.json)
+            create_repo "${REPO}-labs" "Lab: $NAME"
+          done
+          
+          create_repo "portfolio" "Professional portfolio"
+          
+          echo ""
+          echo "✅ Setup complete!"
+          echo ""
+          echo "📋 Summary:"
+          echo "   Org: https://github.com/$ORG"
+          echo "   Owners: $(echo "$OWNERS" | jq -r '[.[].github] | join(", ")')"
+          echo "   Admins: $(echo "$ADMINS" | jq -r '[.[].github] | join(", ")')"
+          echo "   Student: $STUDENT"
